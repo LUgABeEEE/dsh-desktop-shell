@@ -34,7 +34,8 @@
     "lib",
     "locale",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -58,6 +59,35 @@
       }
     }
   },
+  "dshhub": {
+    "schemaVersion": 1,
+    "displayName": "dsh-desktop-shell",
+    "summary": "DeepSeek Harness 桌面 OS 集成：任务完成/待审批系统通知、截图进会话、剪贴板读取与监听、全局热键。内容仅本机处理，不上传。",
+    "categories": [
+      "系统集成",
+      "效率"
+    ],
+    "surfaces": [
+      "host"
+    ],
+    "capabilities": {
+      "provides": [
+        "tool:desktop_notify",
+        "tool:desktop_capture_screen",
+        "tool:desktop_read_clipboard"
+      ]
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.2",
+      "node": ">=20"
+    },
+    "permissions": {
+      "network": [],
+      "clipboard": "read-on-demand",
+      "screenCapture": "on-demand"
+    },
+    "notes": "热键无法聚焦 DSH 窗口（宿主无窗口 seam），按键改为弹通知；截图无拖拽框选，region 需显式坐标；剪贴板监听为轮询且默认关闭。"
+  },
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -71,11 +101,15 @@
   ],
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.4",
-    "node-notifier": "^10.0.1"
+    "clipboardy": "^5.3.2",
+    "node-notifier": "^10.0.1",
+    "screenshot-desktop": "^1.15.6",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/node": "^24.19.1",
     "@types/node-notifier": "^8.0.5",
+    "@types/screenshot-desktop": "^1.15.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   },

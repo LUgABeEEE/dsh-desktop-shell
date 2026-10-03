@@ -28,7 +28,7 @@ export declare const NOTIFY_DEFAULTS: {
     readonly titlePrefix: "DSH · ";
 };
 export declare const CAPTURE_DEFAULTS: {
-    readonly defaultMode: "region";
+    readonly defaultMode: "fullscreen";
     readonly imageFormat: "png";
 };
 export declare const CLIPBOARD_DEFAULTS: {

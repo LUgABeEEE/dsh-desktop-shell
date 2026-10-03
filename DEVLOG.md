@@ -12,6 +12,53 @@
 
 ---
 
+## [2026-10-04] M2–M5 全部完成
+
+**先验依赖，结果原方案点名的东西有两个是坑：**
+
+- `uiohook-nans`（原方案热键**首选**）**在 npm 上根本不存在**。
+- `iohook`（备选）当前 Node/Windows **无预编译二进制**（404），需本地编译，
+  而本机 `cl.exe` 缺失 → 装不上。`node-global-key-listener` 只是键盘监听，不具备全局注册。
+- 结论：**热键不装原生模块**，改用 PowerShell 宿主进程调 Win32
+  `RegisterHotKey` + `GetMessage` 消息循环，Node 侧零依赖。
+- `clipboardy` 能用，但导出的是 **`read()` 不是 `readText()`**，且**没有变更事件 API**
+  → 剪贴板监听只能轮询（750ms，`unref` 掉以免吊住宿主进程）。
+
+**M2 截图**：字节直接进宿主 `ctx.attachments.saveImage()`（实测签名
+`{ data: Buffer, mediaType, name? }` → ref，渲染为 `{ type:'image', attachment: ref }`），
+**不落临时文件**，比原方案的「临时文件用后即删」更干净。
+`window` 模式与拖拽框选**已从范围移除**并明确报错 —— 宿主无窗口句柄，且拖拽遮罩需要
+装不上的原生输入捕获模块。
+
+**M3 剪贴板**：`desktop_read_clipboard` 工具按需读取；监听为轮询，默认关闭；
+首次轮询只建立基线不触发；内容超出 10 万字符截断并在渲染里说明。
+
+**M4 热键**：注册/占用检测/消息循环/退出释放均已实测通过。
+**按键触发那一跳未验证** —— 本会话环境禁止注入键盘（`SendInput` 返回 0、
+`ERROR_ACCESS_DENIED`，结构体大小 40 正确，属环境限制而非代码问题）。
+因为宿主没有窗口 seam，热键按下只能弹通知提示手动切窗口（`fallbackMessage`
+如实说明，不假装成功）；同时注册了 `shell-bridge/raise` 路由等上游 seam。
+`loader/volatile-update` 时会重新注册，改热键不必重启。
+
+**测试（114 项，全绿）** 且**测试抓出两个真 bug**：
+
+1. `defaultMode` 默认 `'region'` —— 但 region 需要显式坐标且没有拖拽遮罩，
+   等于**默认调用必然失败**。已改默认为 `'fullscreen'`。
+2. 无 `ctx.attachments` 时返回了 `ok: true` 却带着 `error` 字段。已修为 `ok: false`。
+
+另外**构建产物冒烟测试抓到第三个 bug**：单元测试全绿（因为都注入假后端），
+但真加载 `clipboardy` 时因 interop 形状不符直接崩。新增 `tests/deps.spec.ts`
+加载**真实模块**断言依赖的成员存在，并断言 `readText` **不存在**，
+防止下一个人再把代码"改回"猜的 API。
+
+**M5**：README 中英双语 + 已知限制前置、`dshhub` 上架清单、`LICENSE`、
+locale 更新、PLAN §11.5 记录模块实测结论、§5 里程碑状态更新。
+
+**仍未验证**：全部四项都**没在真 DSH 里跑过**。测试证明逻辑，不证明宿主集成。
+需 `dsh plugin add file:F:/mimo/dsh/dsh-desktop-shell` 后按 PLAN §7 验收。
+
+---
+
 ## [2026-10-03] M1 通知（代码+测试完成，待真机验证）
 
 先做了 API 核实，结论推翻了好几条 `PLAN.md` 原假设（详见 PLAN.md §11）。

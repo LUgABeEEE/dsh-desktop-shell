@@ -41,7 +41,11 @@ export const NOTIFY_DEFAULTS = {
 } as const
 
 export const CAPTURE_DEFAULTS = {
-  defaultMode: 'region',
+  // 'fullscreen', not the 'region' originally planned: region mode needs explicit
+  // coordinates and there is no drag-to-select overlay (no native input-capture
+  // module is installable here), so defaulting to region would make the most
+  // common call fail. See PLAN.md section 6.
+  defaultMode: 'fullscreen',
   imageFormat: 'png',
 } as const
 
