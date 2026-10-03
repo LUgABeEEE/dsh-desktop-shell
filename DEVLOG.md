@@ -6,7 +6,9 @@
 
 - 包结构落地：`package.json`（含 `dsh.bundle.patch`、`engines.dsh >= 0.1.7-rc.2`、4 个 subpath exports）、`cordis.patch.yml`（notify/capture/clipboard/hotkey 四行）、`locale/{en,zh}.json`、`src/*.ts` + `lib/*.js` 空插件导出（`name`/`inject`/`apply`/Config schema）、`settings.ts`、`tsconfig.json`、`vitest.config.ts`、`tests/exports.spec.ts`、`README.md`。
 - 参考本机已装插件（dsh-context / dsh-cost-meter / dsh-vault / dsh-token-pet）确认约定：ESM `export const name` + `export const inject` + `export function apply`；bundle patch 用 `- insert: [{id, name}]`；locale 提供 `meta.title/description`。
-- 交付方式：git 仓库就绪，便于交给 opencode 续作 M1–M5。
+- M0 集中验证一次：`node` 加载 5 个入口全部通过（name/inject/apply/Config 齐全，子插件名唯一）。
+- git：root commit `18009f6`，23 文件；Z 盘备份 `Z:\backup\dsh-desktop-shell-m0-20261003`。
+- 交付方式：框架 + git 就绪，交给 opencode 续作 M1–M5。
 
 ---
 
