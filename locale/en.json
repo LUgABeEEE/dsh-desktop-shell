@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Desktop Shell (dsh-desktop-shell)",
+    "description": "Desktop OS integration for DeepSeek Harness: global hotkey to summon the window, native system notifications on task complete / approval needed, screenshot capture into the session, and clipboard watch / read."
+  }
+}

@@ -1,0 +1,12 @@
+# dsh-desktop-shell bundle patch: four host-side desktop OS integration rows.
+# Each row loads one subpath export of this package (see package.json "exports").
+# Rows mount in milestone order (notify → capture → clipboard → hotkey).
+- insert:
+    - id: desktop-shell-notify
+      name: 'dsh-desktop-shell/notify'
+    - id: desktop-shell-capture
+      name: 'dsh-desktop-shell/capture'
+    - id: desktop-shell-clipboard
+      name: 'dsh-desktop-shell/clipboard'
+    - id: desktop-shell-hotkey
+      name: 'dsh-desktop-shell/hotkey'

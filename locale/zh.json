@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "桌面集成 (dsh-desktop-shell)",
+    "description": "DeepSeek Harness 桌面 OS 集成：全局热键唤起窗口、任务完成/待审批系统原生通知、截图进会话、剪贴板监听与读取。"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "name": "dsh-desktop-shell",
+  "version": "0.1.0",
+  "description": "Desktop OS integration for DeepSeek Harness: global hotkey, native notifications, screenshot capture, clipboard watch.",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./hotkey": {
+      "types": "./lib/hotkey.d.ts",
+      "default": "./lib/hotkey.js"
+    },
+    "./notify": {
+      "types": "./lib/notify.d.ts",
+      "default": "./lib/notify.js"
+    },
+    "./capture": {
+      "types": "./lib/capture.d.ts",
+      "default": "./lib/capture.js"
+    },
+    "./clipboard": {
+      "types": "./lib/clipboard.d.ts",
+      "default": "./lib/clipboard.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.1.7-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dsh": ">=0.1.7-rc.2"
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "plugin",
+    "desktop",
+    "hotkey",
+    "notification",
+    "screenshot",
+    "clipboard"
+  ]
+}
