@@ -7,7 +7,8 @@ export interface Config {
   minLength?: number
 }
 
-export const ConfigSchema = {
+/** Settings schema — see the note on `Config` in ./notify.ts. */
+export const Config = {
   type: 'object',
   properties: {
     watch: { type: 'boolean', default: false, description: 'Watch clipboard changes' },
@@ -15,6 +16,9 @@ export const ConfigSchema = {
     minLength: { type: 'number', default: 8, description: 'Minimum text length to accept' },
   },
 } as const
+
+/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
+export const ConfigSchema = Config
 
 export function apply(_ctx: unknown, _config: Config = {}): void {
   // M3: ctx.clipboardWatch service + `read_clipboard` tool (PLAN.md §4.4)

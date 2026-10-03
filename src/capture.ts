@@ -6,7 +6,8 @@ export interface Config {
   imageFormat?: 'png' | 'jpeg'
 }
 
-export const ConfigSchema = {
+/** Settings schema — see the note on `Config` in ./notify.ts. */
+export const Config = {
   type: 'object',
   properties: {
     defaultMode: {
@@ -23,6 +24,9 @@ export const ConfigSchema = {
     },
   },
 } as const
+
+/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
+export const ConfigSchema = Config
 
 export function apply(_ctx: unknown, _config: Config = {}): void {
   // M2: register `capture_screen` tool (PLAN.md §4.3)

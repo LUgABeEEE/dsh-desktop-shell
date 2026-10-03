@@ -7,7 +7,8 @@ export interface Config {
   behavior?: 'toggle' | 'summon' | 'hide'
 }
 
-export const ConfigSchema = {
+/** Settings schema — see the note on `Config` in ./notify.ts. */
+export const Config = {
   type: 'object',
   properties: {
     hotkey: { type: 'string', default: 'Alt+Space', description: 'Global hotkey (accelerator syntax)' },
@@ -20,6 +21,9 @@ export const ConfigSchema = {
     },
   },
 } as const
+
+/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
+export const ConfigSchema = Config
 
 export function apply(_ctx: unknown, _config: Config = {}): void {
   // M4: uiohook-nans + GET /shell-bridge/raise + notification fallback (PLAN.md §4.1)
