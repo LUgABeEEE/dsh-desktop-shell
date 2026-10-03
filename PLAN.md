@@ -1,7 +1,11 @@
 # dsh-desktop-shell 开发方案
 
 > 目标读者：接手开发的 Agent / 开发者。读完即可开工。
-> 版本：v1.0 · 2026-10-03
+> 版本：v1.1 · 2026-10-03
+>
+> ⚠️ **v1.1 起：§3.3 / §3.4 / §4.2 的 API 写法已被实测证伪并修正。**
+> 开工前先读 [§11 与真实 API 的差异](#11-与真实-api-的差异v11-新增)，
+> 那里记录了本机 `desktop` profile 实测结果与本文件原假设的冲突。
 
 ---
 
@@ -30,7 +34,7 @@ DeepSeek Harness（DSH）桌面端是 Electron 壳 + Web 应用。社区 4275 �
 | 编号 | 能力 | 命令 / 工具 | 优先级 |
 |---|---|---|---|
 | A | 全局热键唤起/隐藏 DSH 窗口 | 配置项 `hotkey` | P0 |
-| B | 系统通知（任务完成 / 待审批 / 自定义） | 工具 `notify` + 事件挂钩 | P0 |
+| B | 系统通知（任务完成 / 待审批 / 自定义） | 工具 `desktop_notify` | P0 |
 | C | 截图采集（全屏 / 区域 / 窗口）→ 附件 | 工具 `capture_screen` | P1 |
 | D | 剪贴板监听 → 可选注入会话 | 服务 `clipboardWatch` + 工具 `read_clipboard` | P1 |
 
@@ -60,16 +64,16 @@ Desktop Host 进程  ←  ELECTRON_RUN_AS_NODE=1，纯 Node
 ```
 
 **关键约束**：Host 是 `ELECTRON_RUN_AS_NODE=1` 的纯 Node，
-**不能调用 Electron API**（globalShortcut / BrowserWindow / Notification 里的
-Electron 专有部分都不可用）。因此：
+**不能调用 Electron API**。实测确认（§11）：宿主 `ctx` **没有**任何窗口 / 托盘 /
+通知 / 剪贴板 / 截图服务，`desktopShell` 这个 seam 不存在，Electron 侧的全局快捷键
+与 `globalShortcut` 只在 main 进程与渲染进程 preload 里，插件拿不到。
+
+因此四项能力都要自带第三方模块：
 
 - 热键 → Node 原生模块（`uiohook-nans` 或 `node-global-key-listener`）
-- 通知 → `node-notifier`（走系统通知中心）
-- 截图 → `screenshot-desktop` + `sharp` 裁剪
+- 通知 → `node-notifier`（走系统通知中心）✅ 已用于 M1
+- 截图 → `screenshot-desktop` + `sharp` 裁剪（`sharp` 已在 profile 中）
 - 剪贴板 → `clipboardy` / `clipboard-event`
-
-这些都是 Node 原生模块，装进 profile 的 `node_modules` 即可，
-与 Desktop 自带 pnpm 兼容。
 
 ### 3.2 Cordis 插件结构
 
@@ -80,11 +84,11 @@ dsh-desktop-shell/
 ├── package.json          # name: dsh-desktop-shell, dsh.bundle.patch 指向 ./cordis.patch.yml
 ├── cordis.patch.yml      # 挂载 4 个子插件行
 ├── src/
-│   ├── hotkey.ts         # A: ctx.hotkey 服务 + 窗口唤起
-│   ├── notify.ts         # B: ctx.tools.register(notify) + agent 事件挂钩
+│   ├── hotkey.ts         # A: 全局热键 + 窗口唤起
+│   ├── notify.ts         # B: ctx.tools.register(desktop_notify) + 事件挂钩   ← M1 已实现
 │   ├── capture.ts        # C: ctx.tools.register(capture_screen)
-│   ├── clipboard.ts      # D: ctx.clipboardWatch 服务 + read_clipboard 工具
-│   ├── settings.ts       # 设置页（热键/通知/剪贴板开关）
+│   ├── clipboard.ts      # D: 剪贴板监听服务 + read_clipboard 工具
+│   ├── settings.ts       # readConfigField 等 config 读取助手
 │   └── index.ts          # re-export
 ├── locale/{en,zh}.json   # meta.title / meta.description
 └── tests/
@@ -92,48 +96,41 @@ dsh-desktop-shell/
 
 ### 3.3 与 DSH 的集成点
 
+宿主 API 以 [§11](#11-与真实-api-的差异v11-新增) 实测为准。摘要：
+
 | 能力 | 依赖的 ctx | 注册什么 |
 |---|---|---|
-| A 热键 | `ctx.agents`、`ctx.webhookRuntime`(可选) | `ctx.hotkey` 服务；shell overlay 提供 `hotkey://toggle` |
-| B 通知 | `ctx.tools`、`ctx.agent`（事件） | 工具 `notify`；监听 `agent/turn-stopping`、`tools/post-execute` |
-| C 截图 | `ctx.tools`、`ctx.attachments`、`ctx.fs` | 工具 `capture_screen`，产物走 attachments |
-| D 剪贴板 | `ctx.tools`、`ctx.agent.inject` | `ctx.clipboardWatch` 服务；工具 `read_clipboard` |
+| A 热键 | 无（自带原生模块） | 热键注册 + 本地 HTTP raise 路由 |
+| B 通知 | `ctx.tools` | 工具 `desktop_notify`；事件 `agent/turn-stopping`、`approval/request` |
+| C 截图 | `ctx.tools`、`ctx.attachments` | 工具 `capture_screen`，产物走 attachments |
+| D 剪贴板 | `ctx.tools` | 工具 `read_clipboard` |
 
-**声明依赖**：
-```ts
-export const inject = ['tools', 'agents', 'attachments', 'fs']
-```
-（各子插件按需 `inject`，不要在一个文件里全要。）
+**声明依赖**：各子插件按需 `inject`，不要在一个文件里全要。
+`notify` 硬依赖 `['tools']`；`hotkey` / `clipboard` 不依赖宿主服务；
+可选依赖用 `ctx.get(name)` 探测，不要写进 `inject`（写进去会一直等）。
 
 ### 3.4 配置 schema（供设置页渲染）
 
-DSH 0.1.7+ 从插件自己的 Config schema 派生设置页，因此每个子插件导出
-`Config` 接口（Zod / typert 生成 schema）：
+⚠️ **实测修正**：`Config` 必须是 **Schemastery schema**（Standard Schema），
+不是普通对象。且**只有** `Config` 这一个导出名被读取，`ConfigSchema` / `schema`
+都不读。普通对象不是 validator，会静默不生效。
+
+要出现在设置页可编辑的字段必须标 `.volatile()`；非 volatile 字段既不显示也不可写。
+`.volatile()` 字段到达 `apply` 时是一个只有 `get()` 的包装器，**必须调用 `.get()`
+在使用时读取**（不是启动时读一次）。默认值写在 schema 上。
 
 ```ts
-// hotkey.ts
-export interface Config {
-  hotkey?: string            // 默认 'Alt+Space'，格式 electron accelerator 风格
-  enabled?: boolean          // 默认 true
-  behavior?: 'toggle' | 'summon' | 'hide'  // 默认 'toggle'
-}
 // notify.ts
-export interface Config {
-  onTaskComplete?: boolean   // 默认 true
-  onApprovalNeeded?: boolean // 默认 true
-  sound?: boolean            // 默认 true
-  titlePrefix?: string       // 默认 'DSH · '
-}
-// capture.ts
-export interface Config {
-  defaultMode?: 'fullscreen' | 'region' | 'window'  // 默认 'region'
-  imageFormat?: 'png' | 'jpeg'                      // 默认 'png'
-}
-// clipboard.ts
-export interface Config {
-  watch?: boolean            // 默认 false（避免误注入）
-  autoInject?: boolean       // 默认 false；true 时变化内容进会话草稿
-  minLength?: number         // 默认 8
+export const Config = Schema.object({
+  onTaskComplete: Schema.boolean().default(true).volatile(),
+  onApprovalNeeded: Schema.boolean().default(true).volatile(),
+  sound: Schema.boolean().default(true).volatile(),
+  titlePrefix: Schema.string().default('DSH · ').volatile(),
+})
+export function apply(ctx: Context, config: Config) {
+  const read = () => ({
+    sound: readConfigField(config.sound, true),   // 每次使用时读，volatile 改动即时生效
+  })
 }
 ```
 
@@ -144,112 +141,80 @@ export interface Config {
 ### 4.1 热键（A）
 
 1. 用 `uiohook-nans` 注册全局热键（纯 Node，跨 Win/macOS/Linux）。
-2. 触发后**不能直接操作窗口**（没有 Electron API），改走：
-   - **方案 a（推荐，零依赖 Desktop 改动）**：把 `dsh-app://` 窗口唤起做成
-     **shell overlay 席位**——Desktop 已支持「侧栏开关旁的本地化『应用』入口
-     打开原生弹出菜单」，但那是只读菜单。MVP 改用更稳的路子：
-     本地 HTTP：`GET /shell-bridge/raise`（Host 内的 express/hono 路由），
-     Desktop 壳如果监听该事件则聚焦；否则至少**发系统通知**点击可回。
-   - **方案 b（后续）**：给 Desktop 提 PR，新增 `ctx.desktopShell`
-     seam 暴露 `raiseWindow()` / `isVisible()`。
-3. MVP 先做方案 a：`raise` 路由返回 200，若 Desktop 壳未对接则退化为
-   发一条可点击通知（通知 deep-link 到 `http://127.0.0.1:<port>/`）。
+2. 触发后**不能直接操作窗口**（没有 Electron API，也没有 `ctx.desktopShell`），
+   走本地 HTTP `GET /shell-bridge/raise`；宿主未对接则退化为发一条可点击通知。
+3. 注意 `ctx.webServer.register` 的 path 必须是**文档相对路径、无前导斜杠**
+   （宿主以 `<base href="./">` 提供服务），且 Desktop 默认监听**系统分配端口**，
+   端口需读取而非硬编码。
 4. 热键冲突检测：注册失败 → 设置页标红 + 提示换键。
 
-### 4.2 通知（B）
+### 4.2 通知（B）—— ✅ M1 已实现
+
+实测要点（与本节原假设的差异见 §11）：
+
+- 工具定义的字段是 **`parameters`**（JSON Schema），**没有** `schema` 字段。
+- **`output: { schema, render }` 是必填**。`execute` 只返回 `output.schema` 声明的
+  规范 JSON 值，`render` 负责转成 `ContentBlock[]`。拒绝时返回 `{ ok:false, error }`，
+  不要抛异常。
+- 注册要包在 `ctx.inject(['tools'], ...)` + `ctx.effect(...)` 里。
+- **`agent/turn-stopping` 是 serial 事件**（`{ agent, turn, signal }`，无 `next()`）
+  且宿主会 await 它 —— 里面绝不能阻塞等待通知。
+- **待审批的正确 seam 是 `approval/request`**（waterfall，必须调 `next()`），
+  而不是猜工具名 + `tools/pre-execute`。
 
 ```ts
-import notifier from 'node-notifier'
-
-ctx.tools.register({
-  name: 'notify',
-  description: '向操作系统发送原生通知。用于任务完成、需要用户审批、或需要打断用户时。',
-  schema: {
-    type: 'object',
-    properties: {
-      title: { type: 'string' },
-      message: { type: 'string' },
-      urgent: { type: 'boolean', description: '是否需要立即处理' },
-    },
-    required: ['message'],
-  },
-  async execute({ title, message, urgent }) {
-    notifier.notify({ title: prefix + (title ?? ''), message, wait: false, ... })
-    return { ok: true }
-  },
+// 注册
+host.inject(['tools'], (toolCtx) => {
+  toolCtx.effect(() => toolCtx.tools.register({
+    name: 'desktop_notify',
+    description: '...',
+    parameters: { type: 'object', properties: { title: {...}, message: {...}, urgent: {...} }, required: ['message'] },
+    output: { schema: { type: 'json' }, render: renderNotifyResult },  // 必填
+    execute: (args) => notify(args),
+  }), 'desktop-shell-notify: notify tool')
 })
-```
 
-事件挂钩（在 `apply` 里）：
-```ts
-ctx.on('agent/turn-stopping', async (agent) => {
-  if (config.onTaskComplete) { /* notify 任务完成，附 sessionId */ }
-})
-ctx.on('tools/pre-execute', async (event, next) => {
-  if (event.tool === 'ask_user_question' && config.onApprovalNeeded) {
-    /* notify 需要审批 */
-  }
+// 回合结束（serial，不阻塞）
+host.on('agent/turn-stopping', (payload) => { void notify({ ... }) })
+
+// 待审批（waterfall，必须 next()）
+host.on('approval/request', async (req, next) => {
+  void notify({ title: 'Approval needed', urgent: true })
   return next()
 })
 ```
 
+后端 `node-notifier` 首次使用时才动态 import：宿主不提供通知服务也不打包
+node-notifier，动态加载保证缺依赖时只是"通知不可用"而不会让插件行加载失败。
+
 ### 4.3 截图（C）
 
-```ts
-ctx.tools.register({
-  name: 'capture_screen',
-  description: '截取屏幕（全屏/区域/窗口）并作为图片附件返回给当前会话。',
-  schema: {
-    type: 'object',
-    properties: {
-      mode: { type: 'string', enum: ['fullscreen', 'region', 'window'] },
-      // region 时提供四元组；window 时提供 pid 或前台窗口
-    },
-  },
-  async execute(args, ctxAgent) {
-    const buf = await screenshot({ format })
-    const path = await ctx.fs.writeTemp('screenshot-*.png', buf)
-    return ctx.attachments.register(path)  // 使图片进入模型上下文
-  },
-})
-```
+⚠️ 实测：宿主**没有**通用截图 API。`ctx.computerUse` 只暴露一个 provider 插槽
+（`register(name)`），且两个 provider 都是实验性、需显式启用、默认不安装。
+真要截图必须自带第三方模块（`screenshot-desktop` 等）。
 
-依赖：`screenshot-desktop`（跨平台截图）+ `sharp`（裁剪，Desktop 已带 sharp）。
-macOS 需「屏幕录制」权限；Windows 直接可用。
+`ctx.attachments`（`AttachmentStore`）**存在**，但它是内容寻址的持久化附件库
+（`saveImage` / `admitPromptContent` / `ImageAttachmentRef`），**不是**"给我一个临时
+PNG 发出去"的接口 —— 临时截图用完即删的要求与它冲突，需自己管临时文件再决定
+是走 attachments 还是 `agent.inject` data-uri。
 
 ### 4.4 剪贴板（D）
 
-```ts
-ctx.effect(() => {
-  const watcher = new ClipboardWatcher()
-  watcher.on('change', (text) => {
-    if (!config.watch) return
-    if (text.length < config.minLength) return
-    if (config.autoInject) {
-      ctx.agents.active?.inject({ type: 'user', text: `[clipboard] ${text}` })
-    }
-    // 否则只是留在 read_clipboard 工具的缓存里
-  })
-  return () => watcher.stop()
-})
-```
-
-`read_clipboard` 工具：读当前剪贴板文本/图片（图片走 `ctx.attachments`）。
+`navigator.clipboard` 只在浏览器半边用，宿主无 `ctx.clipboard`，必须自带模块。
 
 ---
 
 ## 5. 里程碑
 
-| 里程碑 | 内容 | 产出 | 预估 |
-|---|---|---|---|
-| M0 | 脚手架：包结构、cordis.patch.yml、locale、空插件能被 DSH 加载 | `dsh plugin add ./dsh-desktop-shell` 成功，inventory 里出现 4 行 | 0.5 天 |
-| M1 | **B 通知**（独立可用、风险最低） | `notify` 工具 + turn-stopping 通知 | 1 天 |
-| M2 | **C 截图** | `capture_screen` 工具 + 图片进会话 | 1 天 |
-| M3 | **D 剪贴板** | 服务 + 工具 + 设置项 | 1 天 |
-| M4 | **A 热键**（最难，依赖窗口唤起策略） | 热键注册 + raise 路由 + 通知回退 | 1.5 天 |
-| M5 | 设置页、文档、README、提交 awesome-dsh-plugin | 可上架 | 1 天 |
-
-M1→M2→M3 可并行；M4 单独做。总计约 **5–6 人日**。
+| 里程碑 | 内容 | 状态 |
+|---|---|---|
+| M0 | 脚手架：包结构、cordis.patch.yml、locale、空插件能被 DSH 加载 | ✅ 完成（`18009f6`） |
+| M0.5 | 修 M0 遗留缺陷：lib 为真构建产物 + Config 导出名 | ✅ 完成（`d87f228`） |
+| M1 | **B 通知** | ✅ 代码+测试完成，待真机验证 |
+| M2 | **C 截图** | 待做 |
+| M3 | **D 剪贴板** | 待做 |
+| M4 | **A 热键**（最难，依赖窗口唤起策略） | 待做 |
+| M5 | 设置页联调、文档、README、上架 | 待做 |
 
 ---
 
@@ -257,12 +222,13 @@ M1→M2→M3 可并行；M4 单独做。总计约 **5–6 人日**。
 
 | 风险 | 缓解 |
 |---|---|
-| `uiohook-nans` 是原生模块，需编译或预编译二进制 | Desktop 自带 pnpm 可装；若编译失败用 `node-global-key-listener` 退化（无热键注册，只有键盘监听） |
+| `uiohook-nans` 是原生模块，需编译或预编译二进制 | Desktop 自带 pnpm 可装；若编译失败用 `node-global-key-listener` 退化 |
 | macOS 屏幕录制 / 辅助功能权限 | README 写清；设置页检测权限状态并引导到系统设置 |
-| 桌面端可能不提供 `ctx.attachments` 注入路径的完整文档 | 先读 `packages/attachment` 源码；必要时改用 `agent.inject()` 传图片 data-uri |
-| 热键无法真正聚焦窗口（Electron API 不可达） | MVP 通知回退 + 提 `ctx.desktopShell` seam issue 给官方 |
+| 宿主无窗口聚焦 seam，热键无法真正聚焦窗口 | MVP 通知回退 + 向上游提 `ctx.desktopShell` seam |
 | Windows 通知在专注助手开启时被吞 | 通知带 `urgent`，文档说明 |
 | 热键/剪贴板涉及隐私 | 默认 `watch: false`；README 明示本地处理不上传 |
+| **以 `file:` / symlink 方式安装时插件自身解析不到 `@deepseek-ai/schemastery`** | 已把 schemastery 声明为 `dependencies`；若仍失败，用 `createRequire(宿主入口)` 兜底（参考 `dsh-chat-import/lib/import-prefs.mjs`） |
+| 宿主运行时版本比方案假设的新 | 已按实测把 `engines.dsh` 提到 `>=0.2.0-rc.2` |
 
 ---
 
@@ -274,7 +240,7 @@ M1→M2→M3 可并行；M4 单独做。总计约 **5–6 人日**。
 4. 勾选剪贴板监听后复制一段文本 → `read_clipboard` 能读到；开启 autoInject 时会话草稿出现该文本。
 5. 按 `Alt+Space` →（成功则 DSH 前台；失败则）系统通知出现，点击可回到 DSH。
 6. 设置页可改热键、开关通知、开关剪贴板，改动即时/重启后生效。
-7. `pnpm test` 全绿；`dsh --profile desktop` 启动无 warning。
+7. `npm run verify` 全绿（typecheck + check:lib + test）。
 
 ---
 
@@ -282,9 +248,11 @@ M1→M2→M3 可并行；M4 单独做。总计约 **5–6 人日**。
 
 - **语言**：代码/commit 英文；文档中文（README 中英双语最佳）。
 - **仓库位置**：`F:\mimo\dsh\dsh-desktop-shell\`
-- **测试**：vitest。热键/截图测试用 mock，不要真弹通知。
-- **安全**：不收集、不上传任何剪贴板/截图内容；截图临时文件用后即删（`ctx.effect` 清理）。
-- **兼容**：声明 `engines.dsh >= 0.1.7-rc.2`；Windows 优先，macOS/Linux 尽力。
+- **构建**：`src/*.ts` → `lib/*.js` **提交进 git**（DSH 直接加载 `lib/`，安装不跑构建）。
+  `npm run check:lib` 会在 `lib/` 与 `src/` 漂移时失败。
+- **测试**：vitest。热键/截图/通知测试全部用注入的假后端，**不真弹通知**。
+- **安全**：不收集、不上传任何剪贴板/截图内容；临时文件用后即删。
+- **兼容**：声明 `engines.dsh >= 0.2.0-rc.2`；Windows 优先，macOS/Linux 尽力。
 - **上架**：完成后到 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 提 PR。
 
 ---
@@ -292,13 +260,20 @@ M1→M2→M3 可并行；M4 单独做。总计约 **5–6 人日**。
 ## 9. 参考资料
 
 - DSH 架构：https://deepseek-harness.github.io/deepseek-harness/
-- 插件入门：`docs/user/develop/basic/index.zh.md`（export apply(ctx) 即插件）
-- 工具注册：`docs/user/develop/basic/tool.zh.md`
-- 服务/事件：`docs/user/develop/framework/`
+- 插件入门：`docs/user/develop/basic/index.zh.md`
+- 工具注册：`docs/user/develop/basic/tool.zh.md`、`docs/subsystems/tools.md`
+- 配置与 volatile：`docs/user/develop/basic/config.md`、`docs/subsystems/settings.md`
+- 审批：`docs/subsystems/approval.md`
+- 服务/事件：`docs/cordis-api/fiber.md`、`docs/user/develop/framework/events.md`
 - 社区目录：https://awesome-dsh-plugin.com
-- 插件市场客户端：`dshmarket`（本机 `~/.dsh/profiles/desktop/node_modules/dshmarket`）
-- 本机桌面 profile：`C:\Users\Administrator\.dsh\profiles\desktop\`
-- 本机 DSH 安装：`C:\Users\Administrator\AppData\Local\Programs\DeepSeek Harness\`
+- 本机参考插件（**写代码前先读这些，比文档更贴近真实用法**）：
+  - `~/.dsh/profiles/desktop/node_modules/dsh-context/lib/index.js`（Config + apply）
+  - `~/.dsh/profiles/desktop/node_modules/dsh-rewind-plugin/lib/index.js`（事件钩子）
+  - `~/.dsh/profiles/desktop/node_modules/dsh-vault/lib/index.js`（工具 + 审批 waterfall）
+  - `~/.dsh/profiles/desktop/node_modules/@linxin666/dsh-client-ui-task-board/src/`（defineTool + volatile）
+  - `~/.dsh/profiles/desktop/node_modules/@vectorize-io/hindsight-coding-agents/dist/dsh.js`（ctx.inject + effect）
+
+---
 
 ## 10. 项目结构（目标态）
 
@@ -320,8 +295,54 @@ F:\mimo\dsh\dsh-desktop-shell\
 │   ├── en.json
 │   └── zh.json
 ├── tests/
+│   ├── exports.spec.ts
 │   ├── notify.spec.ts
 │   ├── capture.spec.ts
 │   └── clipboard.spec.ts
 └── README.md
 ```
+
+---
+
+## 11. 与真实 API 的差异（v1.1 新增）
+
+> 本节记录 `PLAN.md` 原假设与本机 `desktop` profile **实测**结果的冲突。
+> 照原假设写会静默失效，故单列。
+
+### 11.1 `Config` 导出（影响全部四个子插件）
+
+| | 原假设 | 实测 |
+|---|---|---|
+| 导出名 | `Config` 或 `ConfigSchema` 皆可 | **只有 `Config`**，其余名字不读 |
+| 形态 | 普通对象 `{ type:'object', properties:{...} }` | **必须是 Schemastery schema**（Standard Schema） |
+| 默认值 | `withDefaults(config, DEFAULTS)` 合并 | **写在 schema 上**，Cordis 校验时填充 |
+| 设置页 | 导出即渲染 | **仅 `.volatile()` 字段**可编辑；非 volatile 既不显示也不可写 |
+| 读取 | 启动时读一次 | volatile 字段是 `{ get() }` 包装器，**使用时**读 |
+
+### 11.2 工具注册
+
+| | 原假设 | 实测 |
+|---|---|---|
+| schema 字段名 | `schema` | **`parameters`** |
+| 输出 | 省略或返回任意值 | **`output: { schema, render }` 必填**；`execute` 只能返回规范 JSON 值 |
+| 拒绝方式 | 抛异常 | 返回 `{ ok:false, code, message }` |
+| 工具名 | `notify` | 用 `desktop_notify`：dsh 注册表分层，同名会被宿主工具遮蔽 |
+
+### 11.3 事件
+
+| 原假设 | 实测 |
+|---|---|
+| `agent/turn-stopping` 存在 | ✅ 存在，但是 **serial**（`{ agent, turn, signal }`，无 `next()`）且**被 await** |
+| `tools/pre-execute` + `event.tool === 'ask_user_question'` | 事件存在，字段是 **`exec.name`**；但用它判断审批**不对**，正确 seam 是 **`approval/request`** waterfall |
+| — | `ctx.effect(fn, label)` **不会**因 config 变化重跑：普通字段变化会卸载重载 fiber，volatile 字段变化只发 `loader/volatile-update`，需自己在使用时重读 |
+
+### 11.4 宿主能力
+
+宿主 `ctx` 中**不存在**：`desktopShell`（窗口/托盘）、通知、剪贴板、截图、
+全局快捷键服务。`ctx.webServer` / `ctx.attachments` / `ctx.fs` / `ctx.commands`
+/ `ctx.settings` / `ctx.tools` / `ctx.approval` 存在。
+
+> 未验证项：`@deepseek-ai/dsh-desktop-host` 是私有包，JS 只存在于二进制
+> `app.asar` 内，无法直接读源码。上面「不存在」的结论来自官方文档 + 本机插件用法
+> + 在 `app.asar` 中检索 `desktopShell` / `shell-bridge` / `globalShortcut` 均为 0 命中。
+> 若要彻底确认，需在运行时用 `ctx.get('<candidate>')` 探测。

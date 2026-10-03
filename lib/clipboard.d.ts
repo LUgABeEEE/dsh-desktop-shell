@@ -1,50 +1,27 @@
+/**
+ * D — clipboard watch / read (P1).
+ *
+ * M3. Only the settings schema is wired up so far; see DEVLOG.md.
+ *
+ * Both `watch` and `autoInject` default to false on purpose: clipboard contents
+ * are private, and the plugin must not start reading them unless asked
+ * (PLAN.md §6).
+ */
+import Schema from '@deepseek-ai/schemastery';
 export declare const name = "desktop-shell-clipboard";
 export declare const inject: string[];
-export interface Config {
-    watch?: boolean;
-    autoInject?: boolean;
-    minLength?: number;
+export interface ClipboardSettings {
+    watch: boolean;
+    autoInject: boolean;
+    minLength: number;
 }
-/** Settings schema — see the note on `Config` in ./notify.ts. */
-export declare const Config: {
-    readonly type: "object";
-    readonly properties: {
-        readonly watch: {
-            readonly type: "boolean";
-            readonly default: false;
-            readonly description: "Watch clipboard changes";
-        };
-        readonly autoInject: {
-            readonly type: "boolean";
-            readonly default: false;
-            readonly description: "Inject changed text into the active session draft";
-        };
-        readonly minLength: {
-            readonly type: "number";
-            readonly default: 8;
-            readonly description: "Minimum text length to accept";
-        };
-    };
-};
-/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
-export declare const ConfigSchema: {
-    readonly type: "object";
-    readonly properties: {
-        readonly watch: {
-            readonly type: "boolean";
-            readonly default: false;
-            readonly description: "Watch clipboard changes";
-        };
-        readonly autoInject: {
-            readonly type: "boolean";
-            readonly default: false;
-            readonly description: "Inject changed text into the active session draft";
-        };
-        readonly minLength: {
-            readonly type: "number";
-            readonly default: 8;
-            readonly description: "Minimum text length to accept";
-        };
-    };
-};
-export declare function apply(_ctx: unknown, _config?: Config): void;
+export declare const Config: Schema<Schemastery.ObjectS<NoInfer<{
+    watch: Schema<boolean, boolean, "volatile-defined">;
+    autoInject: Schema<boolean, boolean, "volatile-defined">;
+    minLength: Schema<number, number, "volatile-defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    watch: Schema<boolean, boolean, "volatile-defined">;
+    autoInject: Schema<boolean, boolean, "volatile-defined">;
+    minLength: Schema<number, number, "volatile-defined">;
+}>>, "plain">;
+export declare function apply(_ctx: unknown, _config?: unknown): void;

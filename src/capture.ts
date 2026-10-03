@@ -1,33 +1,33 @@
+/**
+ * C — screen capture (P1).
+ *
+ * M2. Only the settings schema is wired up so far; see DEVLOG.md.
+ *
+ * Note for whoever implements the tool: the host has no general screenshot API.
+ * `ctx.computerUse` exists but only exposes a single opt-in provider slot and is
+ * not installed by default, so real capture needs a third-party module.
+ */
+
+import Schema from '@deepseek-ai/schemastery'
+
+import { CAPTURE_DEFAULTS } from './settings.js'
+
 export const name = 'desktop-shell-capture'
 export const inject: string[] = []
 
-export interface Config {
-  defaultMode?: 'fullscreen' | 'region' | 'window'
-  imageFormat?: 'png' | 'jpeg'
+export interface CaptureSettings {
+  defaultMode: 'fullscreen' | 'region' | 'window'
+  imageFormat: 'png' | 'jpeg'
 }
 
-/** Settings schema — see the note on `Config` in ./notify.ts. */
-export const Config = {
-  type: 'object',
-  properties: {
-    defaultMode: {
-      type: 'string',
-      enum: ['fullscreen', 'region', 'window'],
-      default: 'region',
-      description: 'Default capture mode',
-    },
-    imageFormat: {
-      type: 'string',
-      enum: ['png', 'jpeg'],
-      default: 'png',
-      description: 'Screenshot image format',
-    },
-  },
-} as const
+export const Config = Schema.object({
+  defaultMode: Schema
+    .union(['fullscreen', 'region', 'window'] as const)
+    .default(CAPTURE_DEFAULTS.defaultMode)
+    .volatile(),
+  imageFormat: Schema.union(['png', 'jpeg'] as const).default(CAPTURE_DEFAULTS.imageFormat).volatile(),
+})
 
-/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
-export const ConfigSchema = Config
-
-export function apply(_ctx: unknown, _config: Config = {}): void {
-  // M2: register `capture_screen` tool (PLAN.md §4.3)
+export function apply(_ctx: unknown, _config: unknown = {}): void {
+  // M2: register the `capture_screen` tool (PLAN.md §4.3).
 }

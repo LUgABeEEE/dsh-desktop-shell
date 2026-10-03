@@ -12,6 +12,52 @@
 
 ---
 
+## [2026-10-03] M1 通知（代码+测试完成，待真机验证）
+
+先做了 API 核实，结论推翻了好几条 `PLAN.md` 原假设（详见 PLAN.md §11）。
+
+**实测确认的关键点：**
+
+- `Config` 必须导出 **Schemastery schema**，且**只有 `Config` 这一个名字**被读；
+  `ConfigSchema` 不读。普通对象不是 validator → 静默失效。
+- 设置页**只渲染 `.volatile()` 字段**；非 volatile 字段既不显示也不可写。
+- `.volatile()` 字段到 `apply` 手里是一个只有 `get()` 的包装器（已实测：
+  `JSON.stringify` 显示为 `{}`，没有 `set`），**必须在使用时重读**，不能启动时读一次。
+  → 删掉了 `withDefaults`，改为 `readConfigField(field, fallback)`。
+- 工具定义字段是 **`parameters`**（JSON Schema），**没有** `schema` 字段；
+  **`output: { schema, render }` 是必填**，`execute` 只能返回规范 JSON 值。
+- `agent/turn-stopping` 存在，但是 **serial**（`{ agent, turn, signal }`，无 `next()`）
+  且**被 await** → 里面只 fire-and-forget，绝不阻塞。
+- 待审批的正确 seam 是 **`approval/request`**（waterfall，必须 `next()`），
+  不是原方案猜的「`tools/pre-execute` + `event.tool`」（真实字段是 `exec.name`）。
+- 宿主**没有**通知服务、也没有打包 `node-notifier` → 确认要用第三方模块。
+- 宿主 ctx 中 `desktopShell` / `shell-bridge` / `globalShortcut` 在 `app.asar` 里
+  **0 命中**，证实没有窗口/托盘/快捷键 seam（PLAN §4.1 的方案 a 是唯一可行路线）。
+
+**实现：**
+
+- `src/notify.ts`：工具名改 `desktop_notify`（dsh 注册表分层，避免被宿主同名工具遮蔽）。
+  行为抽成 `createNotifyPlugin({ config, backend, logger })`，`apply` 只做接线 ——
+  这样测试能注入假后端，**测试绝不真弹通知**（PLAN §8 要求）。
+- 后端 `node-notifier` **首次使用时才动态 import**：缺依赖/坏安装只会退化成
+  「通知不可用」，不会让插件行加载失败。
+- 容错原则：通知失败**绝不能**弄坏 agent 回合。后端异常被吸收成 `{ ok:false, error }`
+  返回值（不抛），`approval/request` 无论如何都调 `next()`（审批决定是宿主的）。
+- 工具注册失败（重名/宿主改接口）只 warn 不炸，参考 modlens 的 degrade-loudly 做法。
+
+**顺带修正：** `engines.dsh` `>=0.1.7-rc.2` → `>=0.2.0-rc.2`（本机 profile 实测运行时
+是 0.2.0-rc.2，原声明偏低）。新增运行时依赖 `@deepseek-ai/schemastery`、`node-notifier`。
+
+**验证：** typecheck 通过；`npm test` **42 passed**（notify 35 + exports 7）。
+测试覆盖：schema 是 Standard Schema、默认值填充、volatile 包装器读取、
+空消息拒绝、后端异常不外泄、urgent 升级提示音、注册失败降级、
+两个事件的开关与 sessionId、以及 `apply` 的注入/订阅形状。
+
+**未验证：** 还没在真 DSH 里跑过（设置页是否出现、通知是否真弹）。
+需 `dsh plugin add file:...` 后实测，见 PLAN §7 验收 1、2、6。
+
+---
+
 ## [2026-10-03] 修 M0 两个缺陷：lib 非构建产物 + Config 导出名不一致
 
 背景：接手续作时先验证工具链，发现 M0 遗留两个真实缺陷。
@@ -32,6 +78,10 @@
 手写 `lib/`，**从未验过真正的构建产物**；DSH 读设置页认哪个名字，两边必有一错。
 
 **处理：**
+
+> ⚠️ **本条结论已被 M1 推翻，见下方 M1 小节。**「两个名字都导出」是无效兜底 ——
+> 宿主只读 `Config`，且真正的问题是**形态**（必须是 Schemastery schema）而非名字。
+> 下面这条双导出仅作为当时的处置记录保留。
 
 - 两个名字都导出。`interface Config`（类型空间）与 `const Config`（值空间）在 TS
   中可共存，`ConfigSchema` 保留为同一对象的别名 —— 与 `dsh-cost-meter` 写法一致，

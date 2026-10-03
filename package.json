@@ -45,14 +45,17 @@
   },
   "engines": {
     "node": ">=20",
-    "dsh": ">=0.1.7-rc.2"
+    "dsh": ">=0.2.0-rc.2"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "compatibility": {
-      "dsh": ">=0.1.7-rc.2"
+      "dsh": ">=0.2.0-rc.2",
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible"
+      }
     }
   },
   "keywords": [
@@ -66,8 +69,13 @@
     "screenshot",
     "clipboard"
   ],
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "node-notifier": "^10.0.1"
+  },
   "devDependencies": {
     "@types/node": "^24.19.1",
+    "@types/node-notifier": "^8.0.5",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   },

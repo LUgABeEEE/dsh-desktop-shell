@@ -1,52 +1,29 @@
+/**
+ * A — global hotkey to summon/hide the window (P0, hardest).
+ *
+ * M4. Only the settings schema is wired up so far; see DEVLOG.md.
+ *
+ * Note for whoever implements this: the host exposes no window-focus seam — there
+ * is no `ctx.desktopShell`, and Desktop's global shortcut handling lives in the
+ * Electron main process and is not reachable from a Cordis plugin. Registered
+ * global shortcuts therefore need a third-party native module, and focusing the
+ * window needs the local-HTTP + notification-fallback route in PLAN.md §4.1.
+ */
+import Schema from '@deepseek-ai/schemastery';
 export declare const name = "desktop-shell-hotkey";
 export declare const inject: string[];
-export interface Config {
-    hotkey?: string;
-    enabled?: boolean;
-    behavior?: 'toggle' | 'summon' | 'hide';
+export interface HotkeySettings {
+    hotkey: string;
+    enabled: boolean;
+    behavior: 'toggle' | 'summon' | 'hide';
 }
-/** Settings schema — see the note on `Config` in ./notify.ts. */
-export declare const Config: {
-    readonly type: "object";
-    readonly properties: {
-        readonly hotkey: {
-            readonly type: "string";
-            readonly default: "Alt+Space";
-            readonly description: "Global hotkey (accelerator syntax)";
-        };
-        readonly enabled: {
-            readonly type: "boolean";
-            readonly default: true;
-            readonly description: "Enable the global hotkey";
-        };
-        readonly behavior: {
-            readonly type: "string";
-            readonly enum: readonly ["toggle", "summon", "hide"];
-            readonly default: "toggle";
-            readonly description: "What the hotkey does";
-        };
-    };
-};
-/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
-export declare const ConfigSchema: {
-    readonly type: "object";
-    readonly properties: {
-        readonly hotkey: {
-            readonly type: "string";
-            readonly default: "Alt+Space";
-            readonly description: "Global hotkey (accelerator syntax)";
-        };
-        readonly enabled: {
-            readonly type: "boolean";
-            readonly default: true;
-            readonly description: "Enable the global hotkey";
-        };
-        readonly behavior: {
-            readonly type: "string";
-            readonly enum: readonly ["toggle", "summon", "hide"];
-            readonly default: "toggle";
-            readonly description: "What the hotkey does";
-        };
-    };
-};
-export declare function apply(_ctx: unknown, _config?: Config): void;
+export declare const Config: Schema<Schemastery.ObjectS<NoInfer<{
+    hotkey: Schema<string, string, "volatile-defined">;
+    enabled: Schema<boolean, boolean, "volatile-defined">;
+    behavior: Schema<"toggle" | "summon" | "hide", "toggle" | "summon" | "hide", "volatile-defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    hotkey: Schema<string, string, "volatile-defined">;
+    enabled: Schema<boolean, boolean, "volatile-defined">;
+    behavior: Schema<"toggle" | "summon" | "hide", "toggle" | "summon" | "hide", "volatile-defined">;
+}>>, "plain">;
+export declare function apply(_ctx: unknown, _config?: unknown): void;

@@ -1,30 +1,34 @@
+/**
+ * A — global hotkey to summon/hide the window (P0, hardest).
+ *
+ * M4. Only the settings schema is wired up so far; see DEVLOG.md.
+ *
+ * Note for whoever implements this: the host exposes no window-focus seam — there
+ * is no `ctx.desktopShell`, and Desktop's global shortcut handling lives in the
+ * Electron main process and is not reachable from a Cordis plugin. Registered
+ * global shortcuts therefore need a third-party native module, and focusing the
+ * window needs the local-HTTP + notification-fallback route in PLAN.md §4.1.
+ */
+
+import Schema from '@deepseek-ai/schemastery'
+
+import { HOTKEY_DEFAULTS } from './settings.js'
+
 export const name = 'desktop-shell-hotkey'
 export const inject: string[] = []
 
-export interface Config {
-  hotkey?: string
-  enabled?: boolean
-  behavior?: 'toggle' | 'summon' | 'hide'
+export interface HotkeySettings {
+  hotkey: string
+  enabled: boolean
+  behavior: 'toggle' | 'summon' | 'hide'
 }
 
-/** Settings schema — see the note on `Config` in ./notify.ts. */
-export const Config = {
-  type: 'object',
-  properties: {
-    hotkey: { type: 'string', default: 'Alt+Space', description: 'Global hotkey (accelerator syntax)' },
-    enabled: { type: 'boolean', default: true, description: 'Enable the global hotkey' },
-    behavior: {
-      type: 'string',
-      enum: ['toggle', 'summon', 'hide'],
-      default: 'toggle',
-      description: 'What the hotkey does',
-    },
-  },
-} as const
+export const Config = Schema.object({
+  hotkey: Schema.string().default(HOTKEY_DEFAULTS.hotkey).volatile(),
+  enabled: Schema.boolean().default(HOTKEY_DEFAULTS.enabled).volatile(),
+  behavior: Schema.union(['toggle', 'summon', 'hide'] as const).default(HOTKEY_DEFAULTS.behavior).volatile(),
+})
 
-/** Alias of {@link Config}, kept for callers written against the M0 scaffold. */
-export const ConfigSchema = Config
-
-export function apply(_ctx: unknown, _config: Config = {}): void {
-  // M4: uiohook-nans + GET /shell-bridge/raise + notification fallback (PLAN.md §4.1)
+export function apply(_ctx: unknown, _config: unknown = {}): void {
+  // M4: global hotkey + GET /shell-bridge/raise + notification fallback (PLAN.md §4.1).
 }

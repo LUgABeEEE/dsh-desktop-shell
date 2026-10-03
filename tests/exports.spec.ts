@@ -14,10 +14,10 @@ const subPlugins = [
 
 describe('plugin exports', () => {
   it('each sub-plugin exports name / inject / apply', () => {
-    for (const [, mod] of subPlugins) {
-      expect(typeof mod.name).toBe('string')
-      expect(Array.isArray(mod.inject)).toBe(true)
-      expect(typeof mod.apply).toBe('function')
+    for (const [label, mod] of subPlugins) {
+      expect(typeof mod.name, `${label}.name`).toBe('string')
+      expect(Array.isArray(mod.inject), `${label}.inject`).toBe(true)
+      expect(typeof mod.apply, `${label}.apply`).toBe('function')
     }
   })
 
@@ -27,40 +27,50 @@ describe('plugin exports', () => {
   })
 })
 
-// Regression guard for the M0 defect: the committed lib/*.js were hand-written
-// and exported `Config`, while src/*.ts exported `ConfigSchema`, so the build
-// silently changed the export name and the settings page could stop resolving.
-// Both names are now exported; this test fails if either is dropped.
-describe('settings schema exports', () => {
-  it('each sub-plugin exports a Config schema object', () => {
+// The host reads exactly one config export: `Config`, and it must be a Standard
+// Schema. The M0 scaffold exported a plain JSON-Schema-like object under two
+// names; a plain object is not a validator, so the row's settings page silently
+// never appeared and no defaults were filled. These tests fail if that regresses.
+describe('Config export', () => {
+  it('each sub-plugin exports a Config', () => {
     for (const [label, mod] of subPlugins) {
-      expect(mod.Config, `${label} is missing a Config schema`).toBeTypeOf('object')
-      expect(mod.Config.type, `${label}.Config.type`).toBe('object')
-      expect(mod.Config.properties, `${label}.Config.properties`).toBeTypeOf('object')
+      expect(mod.Config, `${label} is missing Config`).toBeTypeOf('function')
     }
   })
 
-  it('ConfigSchema is an alias of the same object, not a copy', () => {
+  it('each Config implements Standard Schema, which is what Cordis validates', () => {
     for (const [label, mod] of subPlugins) {
-      expect(mod.ConfigSchema, `${label}.ConfigSchema`).toBe(mod.Config)
+      const standard = (mod.Config as unknown as Record<string, unknown>)['~standard']
+      expect(standard, `${label}.Config is not a Standard Schema`).toBeTruthy()
+      expect((standard as { version?: number }).version).toBe(1)
     }
   })
 
-  it('schema defaults match the documented defaults', () => {
-    expect(notify.Config.properties.onTaskComplete.default).toBe(true)
-    expect(notify.Config.properties.onApprovalNeeded.default).toBe(true)
-    expect(notify.Config.properties.sound.default).toBe(true)
-    expect(notify.Config.properties.titlePrefix.default).toBe('DSH · ')
+  it('no sub-plugin exports the misleading ConfigSchema alias any more', () => {
+    for (const [label, mod] of subPlugins) {
+      expect('ConfigSchema' in mod, `${label} still exports ConfigSchema`).toBe(false)
+    }
+  })
 
-    expect(capture.Config.properties.defaultMode.default).toBe('region')
-    expect(capture.Config.properties.imageFormat.default).toBe('png')
+  it('Config validates and fills defaults', () => {
+    expect((notify.Config as (v: unknown) => unknown)({})).toBeTruthy()
+    expect(() => (notify.Config as (v: unknown) => unknown)({ sound: 'loud' })).toThrow()
+  })
+})
 
-    // Clipboard watching is opt-in: watching must stay off by default (PLAN.md §6).
-    expect(clipboard.Config.properties.watch.default).toBe(false)
-    expect(clipboard.Config.properties.autoInject.default).toBe(false)
-    expect(clipboard.Config.properties.minLength.default).toBe(8)
+// Settings pages only render fields marked `.volatile()`; a non-volatile field is
+// invisible and unwritable from the UI. Keep every user-facing field volatile.
+describe('volatile settings fields', () => {
+  const isVolatileWrapper = (v: unknown) => typeof (v as { get?: unknown })?.get === 'function'
 
-    expect(hotkey.Config.properties.hotkey.default).toBe('Alt+Space')
-    expect(hotkey.Config.properties.behavior.default).toBe('toggle')
+  it('every declared field arrives as a volatile wrapper', () => {
+    for (const [label, mod] of subPlugins) {
+      const parsed = (mod.Config as (v: unknown) => Record<string, unknown>)({})
+      const keys = Object.keys(parsed)
+      expect(keys.length, `${label}.Config declared no fields`).toBeGreaterThan(0)
+      for (const key of keys) {
+        expect(isVolatileWrapper(parsed[key]), `${label}.${key} is not volatile`).toBe(true)
+      }
+    }
   })
 })
