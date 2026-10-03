@@ -50,9 +50,19 @@ DeepSeek Harness 桌面端 OS 集成插件包（Cordis bundle）。
 
 ## 安装
 
+⚠️ 路径**不要**带 `file:` 前缀 —— `file:F:/...` 会被 pnpm 当成相对路径而失败
+（这是旧版 PLAN.md 里的错误写法）。用普通绝对路径：
+
 ```bash
-dsh plugin --profile desktop add file:F:/mimo/dsh/dsh-desktop-shell
+# 桌面 profile 由 Electron 应用独占管理，CLI 改不了，需在应用内插件页安装
+# （或从应用自带的 profile 目录手工加入 bundles）
+
+# 可用 CLI 管理的 profile（例如从 web 模板新建）：
+dsh myprofile --from-default-profile web
+dsh plugin --profile myprofile add F:/mimo/dsh/dsh-desktop-shell
 ```
+
+pnpm 9 还需要 profile 目录下有 `.npmrc`：`ignore-workspace-root-check=true`。
 
 ## 开发
 

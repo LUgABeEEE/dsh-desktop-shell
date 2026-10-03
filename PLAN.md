@@ -241,13 +241,35 @@ PNG 发出去"的接口 —— 临时截图用完即删的要求与它冲突，�
 
 ## 7. 验收标准（MVP 完成定义）
 
-1. `dsh plugin add file:F:/mimo/dsh/dsh-desktop-shell` 后，插件页出现 4 个子插件且 `active`。
-2. 对话说「发个通知说会议开始了」→ 系统通知中心出现原生通知。
-3. 对话说「截图给我看」→ 会话内出现屏幕截图附件，模型能描述其内容。
-4. 勾选剪贴板监听后复制一段文本 → `read_clipboard` 能读到；开启 autoInject 时会话草稿出现该文本。
-5. 按 `Alt+Space` →（成功则 DSH 前台；失败则）系统通知出现，点击可回到 DSH。
-6. 设置页可改热键、开关通知、开关剪贴板，改动即时/重启后生效。
-7. `npm run verify` 全绿（typecheck + check:lib + test）。
+⚠️ **安装命令更正**：原写法 `dsh plugin add file:F:/...` **会失败** —— pnpm 把
+`file:F:/...` 当相对路径，解析成 `<profile>/F:/mimo/...`。必须用普通绝对路径：
+
+```bash
+dsh plugin --profile <profile> add F:/mimo/dsh/dsh-desktop-shell
+```
+
+另有两点实测约束：
+- `desktop` profile **由 Electron 应用独占管理**，CLI 报
+  `profile "desktop" is managed exclusively by the Electron application`，
+  只能在应用内插件页安装。
+- pnpm 9 需要 profile 目录下 `.npmrc` 含 `ignore-workspace-root-check=true`。
+
+### 验收现状
+
+| # | 标准 | 状态 |
+|---|---|---|
+| 1 | 4 个子插件出现且 active | 🟡 包与 4 行 bundle patch 已装进真实 profile 并全部加载成功；「插件页显示 active」需 UI 确认 |
+| 2 | 对话触发原生通知 | ⬜ 需真机对话（逻辑已单测，真机依赖已实测） |
+| 3 | 截图进会话 | ⬜ 需真机对话。截图本身已实测出真实 PNG，存储走已核实的 `attachments.saveImage` |
+| 4 | 剪贴板读取/注入 | ⬜ 需真机对话。`clipboardy.read()` 已实测可用 |
+| 5 | 热键唤起 DSH | ❌ **无法达成** —— 宿主无窗口 seam（§11.4 已定案），降级为通知回退 |
+| 6 | 设置页可改、即时生效 | 🟡 4 个 Config 均为 Standard Schema 且字段全部 `.volatile()`（已验证）；页面渲染需 UI 确认 |
+| 7 | 测试全绿 + 启动无 warning | ✅ `npm run verify` 绿（114 测试）；真实 profile 启动**无本插件任何 warning/error** |
+
+**已自动验证的硬证据**（见 DEVLOG 2026-10-04）：装进真实 profile 后，4 行全部从
+profile 的 `node_modules` 解析并加载成功（`name`/`inject`/`apply` 齐备、`Config`
+为 Standard Schema、字段全 volatile），profile 正常启动。
+**未验证**：设置页渲染、工具进入模型目录、通知真弹 —— 这三项都需要 UI 或模型对话。
 
 ---
 
@@ -349,10 +371,15 @@ F:\mimo\dsh\dsh-desktop-shell\
 全局快捷键服务。`ctx.webServer` / `ctx.attachments` / `ctx.fs` / `ctx.commands`
 / `ctx.settings` / `ctx.tools` / `ctx.approval` 存在。
 
-> 未验证项：`@deepseek-ai/dsh-desktop-host` 是私有包，JS 只存在于二进制
-> `app.asar` 内，无法直接读源码。上面「不存在」的结论来自官方文档 + 本机插件用法
-> + 在 `app.asar` 中检索 `desktopShell` / `shell-bridge` / `globalShortcut` 均为 0 命中。
-> 若要彻底确认，需在运行时用 `ctx.get('<candidate>')` 探测。
+✅ **已由源码定案**（此前只是推断）：`app.asar` 内可直接读出
+`@deepseek-ai/dsh-desktop-host/lib/index.js`，其 `name` 是 **`desktop-office`** ——
+只挂载 LibreOffice 相关的 skills 与工作区依赖，**不提供任何窗口/托盘/通知/剪贴板
+能力**。`dsh-host-open-in-app` 也与本主题无关（它负责在工作区目录上打开**外部**
+编辑器/GUI/终端）。在 `app.asar` 中检索 `raiseWindow` / `focusWindow` /
+`showWindow` / `desktopCapturer` / `RegisterHotKey` / `node-notifier` /
+`screenshot-desktop` 均为 0 命中。
+
+结论：M4「热键聚焦窗口」在当前宿主上**不可能实现**，只能通知回退。
 
 ### 11.5 第三方模块实测（v1.1 新增：原方案点名的有几个不能用）
 

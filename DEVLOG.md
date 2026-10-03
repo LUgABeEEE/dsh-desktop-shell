@@ -12,6 +12,57 @@
 
 ---
 
+## [2026-10-04] 真机验证（自动完成，未改动 desktop profile）
+
+`dsh` CLI 不在 PATH，但它就在 `app.asar` 里。用 Electron 以纯 Node 模式跑即可：
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE='1'
+& 'C:\Users\Administrator\AppData\Local\Programs\DeepSeek Harness\DeepSeek Harness.exe' `
+  '...\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js' --version   # => 0.2.0-rc.2
+```
+
+**过程中查到的三件重要事实：**
+
+1. **`desktop` profile 由 Electron 应用独占管理**，CLI 直接拒绝：
+   `profile "desktop" is managed exclusively by the Electron application`。
+   所以**没有动 desktop profile**，改为从 web 模板新建了临时 profile `dshtest` 来验证。
+2. **PLAN §7 原来的安装命令是错的**：`dsh plugin add file:F:/...` 会失败 ——
+   pnpm 把 `file:F:/...` 当**相对路径**，拼成 `<profile>/F:\mimo\...` 后
+   `ENOENT: scandir`。`file:///F:/...` 也不行（dsh 会先归一化成带 `file:` 的路径）。
+   **必须用普通绝对路径** `F:/mimo/dsh/dsh-desktop-shell`。
+3. **pnpm 9 需要** profile 目录下 `.npmrc` 含 `ignore-workspace-root-check=true`
+   （写在 `pnpm-workspace.yaml` 里无效，那是 pnpm 10+ 的位置）。
+
+**验证结果（硬证据）：**
+
+- `dsh plugin --profile dshtest add F:/...` → 成功，`dsh-desktop-shell 0.1.0` 已装。
+- 4 行 bundle patch **全部从 profile 的 `node_modules` 解析并加载成功**：
+  `name` / `inject` / `apply` 齐备、`Config` 为 Standard Schema、**字段全部 volatile**，
+  且行 id 与导出的插件名一一对应。
+- **依赖经 link 安装后仍能解析**（含 `@deepseek-ai/schemastery`）—— 之前担心的
+  「symlink 安装解析不到 schemastery」这个坑**不存在**。
+- **profile 正常启动**：`dsh web: http://127.0.0.1:3080/`，stderr 里**没有任何**
+  本插件的 warning/error（只有一条无关的 Node `fs.Stats` 弃用提示）。
+- 桌面端进程当时未运行，安装没有打断任何活动会话。
+
+**仍未验证（需要 UI 或模型对话，自动化到头了）：**
+设置页是否真的渲染出字段、三个工具是否进入模型的工具目录、通知是否真弹。
+尝试过读 API（`/api/ping`、`/api/v1/graphql`）：鉴权 cookie 能拿到，但该 profile
+未挂载这些路由（404），拿不到 settings 描述。
+
+**顺带把 §11.4 的推断升级为定案**：asar 里能直接读出
+`@deepseek-ai/dsh-desktop-host/lib/index.js`，它的 `name` 是 **`desktop-office`** ——
+只管 LibreOffice skills，**不提供任何窗口/托盘/通知/剪贴板能力**。
+`dsh-host-open-in-app` 是「在工作区目录上打开外部编辑器」，与本主题无关。
+故 M4「热键聚焦窗口」在当前宿主上确认**不可能实现**。
+
+**留下的东西：** profile `dshtest`（含 `.npmrc` / `pnpm-workspace.yaml` 配置）保留
+在 `$DSH_HOME/profiles/` 下作为后续验证用的脚手架，对 `desktop` 无任何影响。
+不需要时直接删掉该目录即可。
+
+---
+
 ## [2026-10-04] M2–M5 全部完成
 
 **先验依赖，结果原方案点名的东西有两个是坑：**
