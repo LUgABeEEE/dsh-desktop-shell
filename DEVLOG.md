@@ -12,6 +12,43 @@
 
 ---
 
+## [2026-10-04] 尝试真机对话验证，卡在凭据（自动化到此为止）
+
+想用真实对话验通知/截图/剪贴板三件事。UI 能开、消息能发出去，但这一轮运行**失败在凭据**：
+
+```
+MISSING_CREDENTIAL
+本轮运行失败 llm-deepseek: no API key for provider route "deepseek-official";
+store DEEPSEEK_API_KEY through the credentials service (the web Models page writes it),
+or export DEEPSEEK_API_KEY in the launching environment
+```
+
+**排查结论：**
+
+- 消息确实发出去了、会话确实建起来了、工具也确实被模型选中了 —— 只是模型调用前就挂了。
+- `~/.dsh/.credentials.yaml` 里存的是 DeepSeek **账号 OAuth token**（`records[].payload.token`
+  + `issuer`）和一个 `XIAOMI_TOKEN_PLAN_CN_API_KEY`，**不是** `deepseek-official` 路由要的
+  API key；`~/.dsh/.env` 里只有 `GH_ACCESS`。
+- 桌面应用大概是靠 Electron 侧把账号 token 注入到 provider 路由的，而 **CLI 启动的 profile
+  没有这条注入路径**，所以只能用 `DEEPSEEK_API_KEY` 环境变量。
+
+**没有继续绕的原因：** 要往下走只有两条路 —— 把账号 token 挪去当 API key 用（我不该动用户
+的凭据文件），或由用户自己提供 key。前者是越界。
+
+**顺带记下的实测细节**（下次做 UI 自动化会用到）：
+
+- 输入框是 **Lexical** 编辑器（`contenteditable` + `data-lexical-text`），直接设
+  `textContent` 不生效，要用 `document.execCommand('insertText', ...)` 再补一个 `input`
+  事件。读 `innerText` 也要等一拍，否则读到空串。
+- 发送按钮没有 a11y ref，a11y 快照里根本看不到输入框；只能靠
+  `[...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === '发送消息')`
+  定位。截图工具在无可见桌面时不可用，只能靠 DOM 求值。
+
+**当前验收状态**：1 / 6 / 7 已验证；2 / 3 / 4（通知真弹、截图进会话、剪贴板读出）
+**仍然待验**，需要可用的模型凭据。5 已确认无法达成。
+
+---
+
 ## [2026-10-04] 真机 RPC 验证：4 个子插件确认 active，设置项确认可写
 
 上一轮只验证到「包能装、能加载、profile 能启动」。这次用浏览器 + 宿主 RPC 拿到了
