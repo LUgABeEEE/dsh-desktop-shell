@@ -161,7 +161,18 @@ export declare function createCapturePlugin(options: {
         mode?: string;
         region?: unknown;
         format?: string;
-    }, attachments?: CaptureToolCtx["attachments"]): Promise<CaptureResult>;
+    }, attachments?: CaptureToolCtx["attachments"]): Promise<CaptureResult | {
+        bytes: number;
+        height?: number;
+        width?: number;
+        format: string;
+        ok: boolean;
+        attachment: unknown;
+        mode: CaptureMode;
+        /** Set when `mode: 'region'` was requested but no coordinates were given. */
+        needsRegion?: boolean;
+        error?: string;
+    }>;
 };
 export type CapturePlugin = ReturnType<typeof createCapturePlugin>;
 export declare function apply(ctx: unknown, config?: unknown): void;

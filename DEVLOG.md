@@ -12,6 +12,40 @@
 
 ---
 
+## [2026-10-04] 穷尽无凭据路径 + 静态核实 attachments 契约，顺手修了一个真 bug
+
+**先说结论：验收 2/3/4 确实无法在无凭据下验证，别再绕了。**
+
+穷举了宿主 RPC 端点（网关会区分 `not found` 与「参数缺失」，所以能枚举）：
+
+- **不存在**任何免 LLM 的工具执行端点：`tool/execute`、`tools/execute`、`tool/call`、
+  `tools/call`、`tool/list`、`tools/schemas`、`attachments/saveImage` 全部 `not found`。
+- 存在但都要 `request`/`agentId`：`session/create`、`session/prompt`、`commands/execute`、
+  `skills/list` —— 即都需要模型。
+- 也没有列 provider 的端点（`models/list`、`llm/list`、`llm/routes` 均不存在），
+  所以连「有没有别的可用路由」都查不出来。
+
+**但用 asar 静态核实了 `ctx.attachments` 契约，纠正了一个隐患并修掉一个真 bug：**
+
+- `AttachmentStore extends Service`，`constructor(ctx) { super(ctx, "attachments") }`
+  —— 服务名确认是 `attachments`，且在根作用域提供，因此
+  `ctx.inject(['tools'], toolCtx)` 里的 `toolCtx.attachments` **确实可用**（之前只是假设）。
+- `saveImage(input)` → `prepareImageFile` 实际读的是 `input.data` / `input.mediaType` /
+  `input.name` —— 和我写的**完全一致**，参数形状猜对了。
+- **但它会 normalize**：可能重新编码并缩放，返回的 ref 是
+  `{ attachmentId: sha256:…, mediaType, width, height, bytes, name?, originalDimensions? }`。
+  我原先报告的是**自己用 sharp 量的**尺寸和**请求的**格式 —— 一旦宿主重编码/缩放，
+  模型拿到的元数据就和它即将看到的图片对不上。已改为优先采用 ref 里的真实
+  `mediaType`/`width`/`height`/`bytes`，并补两项测试（有 ref 用 ref、无 ref 保留自身测量）。
+  现在 116 项测试。
+- 另外记下：默认 `maxImageBytes` 20MB，媒体类型受部署侧 `imageLimits.mediaTypes`
+  约束，不匹配会抛 `AttachmentError`（`UNSUPPORTED_IMAGE_TYPE`）——我的实现已捕获并
+  转成 `ok:false` 返回，不会炸回合。
+
+**顺带**：`npm run verify` 在我只改 `src/` 未重建时会红（`check:lib`），行为正确。
+
+---
+
 ## [2026-10-04] 尝试真机对话验证，卡在凭据（自动化到此为止）
 
 想用真实对话验通知/截图/剪贴板三件事。UI 能开、消息能发出去，但这一轮运行**失败在凭据**：

@@ -144,6 +144,33 @@ describe('createCapturePlugin.execute', () => {
     expect(result.error).toContain('ctx.attachments')
   })
 
+  it('reports the stored numbers, because the store normalizes and may downscale', async () => {
+    // The host re-encodes and can shrink the image, so the ref is the authority.
+    const saveImage = vi.fn(async () => ({
+      attachmentId: 'sha256:abc',
+      mediaType: 'image/jpeg',
+      width: 1280,
+      height: 720,
+      bytes: 4242,
+    }))
+    const plugin = createCapturePlugin({ config: {}, deps: deps() })
+    const result = await plugin.execute({ format: 'png' }, { saveImage })
+    expect(result).toMatchObject({
+      ok: true,
+      format: 'jpeg',
+      width: 1280,
+      height: 720,
+      bytes: 4242,
+    })
+  })
+
+  it('keeps its own measurements when the store returns a bare ref', async () => {
+    const saveImage = vi.fn(async () => ({ attachmentId: 'sha256:abc' }))
+    const plugin = createCapturePlugin({ config: {}, deps: deps() })
+    const result = await plugin.execute({}, { saveImage })
+    expect(result).toMatchObject({ format: 'png', width: 1920, height: 1080 })
+  })
+
   it('turns a store failure into a refusal', async () => {
     const saveImage = vi.fn(async () => { throw new Error('disk full') })
     const plugin = createCapturePlugin({ config: {}, deps: deps() })
