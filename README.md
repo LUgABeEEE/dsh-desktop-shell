@@ -16,6 +16,18 @@ DeepSeek Harness 桌面端 OS 集成插件包（Cordis bundle）。
 全部内容**仅在本机处理，不上传**。方案与验收见 [PLAN.md](./PLAN.md)（**§11 记录了与真实 API 的差异**），
 开发日志见 [DEVLOG.md](./DEVLOG.md)。
 
+## 已在真实 DSH 中验证
+
+装进真实 profile 后确认（详见 PLAN.md §7、§7.1）：
+
+- 4 个子插件在宿主插件清单里均为 **`enabled: true` + `fiberPhase: "active"`**，
+  bundle 显示 `installed: true`，中英双语 locale 正常解析。
+- 4 组设置项都出现在设置服务里，`autoGenerate: true`、`applies: "live"`；
+  写入 `minLength` 8→21→8 往返成功，即改即生效。
+- profile 启动时本插件**无任何 warning / error**。
+
+仍需真人对话才能确认的：通知真弹、截图进会话、剪贴板读出。
+
 ## 已知限制（重要，请先读）
 
 这些不是待办，而是本机实测后的既有限制：

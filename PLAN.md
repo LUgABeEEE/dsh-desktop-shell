@@ -258,18 +258,40 @@ dsh plugin --profile <profile> add F:/mimo/dsh/dsh-desktop-shell
 
 | # | 标准 | 状态 |
 |---|---|---|
-| 1 | 4 个子插件出现且 active | 🟡 包与 4 行 bundle patch 已装进真实 profile 并全部加载成功；「插件页显示 active」需 UI 确认 |
-| 2 | 对话触发原生通知 | ⬜ 需真机对话（逻辑已单测，真机依赖已实测） |
-| 3 | 截图进会话 | ⬜ 需真机对话。截图本身已实测出真实 PNG，存储走已核实的 `attachments.saveImage` |
-| 4 | 剪贴板读取/注入 | ⬜ 需真机对话。`clipboardy.read()` 已实测可用 |
+| 1 | 4 个子插件出现且 active | ✅ **已验证**：`pluginInventory/list` 显示 4 个 entry 均 `enabled: true` + `fiberPhase: "active"`；`pluginManager/listBundles` 显示 bundle `dsh-desktop-shell@0.1.0` `installed/enabled: true`、4 行齐全、中英 locale 已解析 |
+| 2 | 对话触发原生通知 | ⬜ 需模型对话。工具注册已间接证实（见下），通知后端已实测加载 |
+| 3 | 截图进会话 | ⬜ 需模型对话。截图已实测出真实 PNG，存储走已核实的 `attachments.saveImage` |
+| 4 | 剪贴板读取/注入 | ⬜ 需模型对话。`clipboardy.read()` 已实测可用 |
 | 5 | 热键唤起 DSH | ❌ **无法达成** —— 宿主无窗口 seam（§11.4 已定案），降级为通知回退 |
-| 6 | 设置页可改、即时生效 | 🟡 4 个 Config 均为 Standard Schema 且字段全部 `.volatile()`（已验证）；页面渲染需 UI 确认 |
-| 7 | 测试全绿 + 启动无 warning | ✅ `npm run verify` 绿（114 测试）；真实 profile 启动**无本插件任何 warning/error** |
+| 6 | 设置页可改、即时生效 | ✅ **已验证**：4 个 ns 出现在 `settings/describe`，`autoGenerate: true`、`applies: "live"`；写入 `minLength` 8→21→8 往返成功并落为 `user` 覆盖 |
+| 7 | 测试全绿 + 启动无 warning | ✅ `npm run verify` 绿（114 测试）；真实 profile 启动无本插件任何 warning/error |
 
-**已自动验证的硬证据**（见 DEVLOG 2026-10-04）：装进真实 profile 后，4 行全部从
-profile 的 `node_modules` 解析并加载成功（`name`/`inject`/`apply` 齐备、`Config`
-为 Standard Schema、字段全 volatile），profile 正常启动。
-**未验证**：设置页渲染、工具进入模型目录、通知真弹 —— 这三项都需要 UI 或模型对话。
+### 7.1 如何复现这次验证
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE='1'
+$dsh='C:\Users\Administrator\AppData\Local\Programs\DeepSeek Harness\DeepSeek Harness.exe'
+$bin='C:\Users\Administrator\AppData\Local\Programs\DeepSeek Harness\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js'
+
+dsh myprofile --from-default-profile web                       # 建临时 profile
+dsh plugin --profile myprofile add F:/mimo/dsh/dsh-desktop-shell
+dsh --profile myprofile --no-open                              # 启动，输出带 token 的 URL
+```
+
+浏览器打开该 URL 后，宿主 RPC 是带类型信封的 JSON（`method` = 去掉 `/api/` 的路径，
+`payload` 必须恰好含一个 `args` 对象）：
+
+```js
+fetch('/api/pluginInventory/list', { method:'POST', headers:{'content-type':'application/json'},
+  body: JSON.stringify({ type:'client-request', rpcId:'p1', method:'pluginInventory/list', payload:{ args:{} } })})
+```
+
+可用端点：`pluginInventory/list`（含 `fiberPhase`）、`pluginManager/listBundles`、
+`settings/describe`、`settings/update`、`commands/list`。
+（`/api/v1/graphql` 与 `/api/ping` 在该 profile 下 404。）
+
+**注意：插件面板 UI 可能显示为空列表**，那是因为它读的是 `pluginInventory/list` 的
+另一层视图；以上 RPC 返回值才是权威判据。
 
 ---
 

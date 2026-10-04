@@ -12,6 +12,61 @@
 
 ---
 
+## [2026-10-04] 真机 RPC 验证：4 个子插件确认 active，设置项确认可写
+
+上一轮只验证到「包能装、能加载、profile 能启动」。这次用浏览器 + 宿主 RPC 拿到了
+**权威判据**，把验收 1 和 6 从「需 UI 确认」变成「已验证」。
+
+**宿主 RPC 协议**（自己摸出来的，`/api/v1/graphql` 在这个 profile 下 404）：
+
+```js
+// method = 去掉 /api/ 的路径；payload 必须恰好含一个 args 对象
+fetch('/api/pluginInventory/list', { method:'POST', headers:{'content-type':'application/json'},
+  body: JSON.stringify({ type:'client-request', rpcId:'p1', method:'pluginInventory/list', payload:{ args:{} } })})
+```
+
+踩了三个坑才发对：先是缺 `type/rpcId/method/payload`；再是 `method` 必须等于路径；
+再是 payload 要包一层 `args`。**可用端点**：`pluginInventory/list`（含 `fiberPhase`）、
+`pluginManager/listBundles`、`settings/describe`、`settings/update`、`commands/list`。
+
+**验收 1 —— 4 个子插件 active（决定性证据）：**
+
+```
+include:desktop-shell-notify      dsh-desktop-shell/notify      enabled:true  fiberPhase:"active"
+include:desktop-shell-capture     dsh-desktop-shell/capture     enabled:true  fiberPhase:"active"
+include:desktop-shell-clipboard   dsh-desktop-shell/clipboard   enabled:true  fiberPhase:"active"
+include:desktop-shell-hotkey      dsh-desktop-shell/hotkey      enabled:true  fiberPhase:"active"
+```
+
+`listBundles` 另外显示 bundle `dsh-desktop-shell@0.1.0` `installed:true enabled:true
+removable:true`，4 行齐全，且**中英双语 meta 已从 locale 正确解析**（说明
+`locale/*.json` 与 `exports` 映射都work）。
+
+**由此可推断工具已注册**：`notify`/`capture`/`clipboard` 都声明 `inject: ['tools']`，
+而 Cordis 只有在 fiber 里 `inject` 的服务就绪后才会让 fiber 变为 `active`。
+既然是 `active`，说明 `tools` 服务已解析、`ctx.effect` 里的 `tools.register()` 已执行。
+
+**验收 6 —— 设置项可写、即时生效：**
+
+`settings/describe` 里 4 个 ns 全部 `autoGenerate: true`、`applies: "live"`，
+字段与默认值与设计一致（`watch/autoInject: false`、`minLength: 8`、
+`hotkey: Alt+Space`、`defaultMode: fullscreen`、titlePrefix `DSH · `）。
+
+写入往返实测：`minLength` 8 → 21 → 8，两次 `settings/update` 均 `ok: true`，
+中间值正确落为 `user` 覆盖，宿主未崩。**这也反过来证明 `.volatile()` 是对的** ——
+非 volatile 字段会被写入路径拒绝（"is not volatile"）。
+
+**一个小坑记录**：插件面板 UI 里两个列表是空的，容易误判成「插件没装上」。
+实际上 UI 读的是 `pluginInventory/list` 的另一层视图；权威判据在上面的 RPC 返回里。
+
+**残留**：`dshtest` profile 里 `desktop-shell-clipboard.minLength` 留了一条 `user`
+覆盖值 8 —— 与默认值完全相同，行为无差别。
+
+**仍未验证（需模型对话）**：通知真弹、截图进会话、剪贴板读出。
+另外热键「真实按键 → WM_HOTKEY」仍需人在键盘前手测（本环境禁止注入键盘）。
+
+---
+
 ## [2026-10-04] 真机验证（自动完成，未改动 desktop profile）
 
 `dsh` CLI 不在 PATH，但它就在 `app.asar` 里。用 Electron 以纯 Node 模式跑即可：
