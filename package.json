@@ -42,7 +42,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check:lib": "tsc -p tsconfig.json && git diff --exit-code -- lib",
-    "verify": "npm run typecheck && npm run check:lib && npm test"
+    "check:docs": "node scripts/check-docs.mjs",
+    "verify": "npm run typecheck && npm run check:lib && npm run check:docs && npm test"
   },
   "engines": {
     "node": ">=20",
