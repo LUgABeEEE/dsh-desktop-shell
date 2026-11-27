@@ -1,5 +1,7 @@
 # dsh-desktop-shell
 
+[![CI](https://github.com/LUgABeEEE/dsh-desktop-shell/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/LUgABeEEE/dsh-desktop-shell/actions/workflows/ci.yml)
+
 DeepSeek Harness 桌面端 OS 集成插件包（Cordis bundle）。
 
 > English summary: see [English](#english) at the bottom.
