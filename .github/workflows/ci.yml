@@ -1,0 +1,51 @@
+# What runs on every push and pull request.
+#
+# This repository has no service to talk to: every test injects its backend, and the
+# two that touch the real desktop (clipboard, screenshot) treat "this machine has no
+# clipboard/display" as a reported error rather than a failure. That is deliberate —
+# it is what lets the same suite run on a headless runner, on a locked Windows
+# desktop, and on a developer's machine without a skip list that hides real breakage.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The published package still runs on Node 20, but the test toolchain does
+        # not: vitest 5 requires ^22.12 || ^24 || >=26, so 20 is not in the matrix.
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # `lib/` is committed — it is what the Host loads — so a source change that
+      # forgets `npm run build` has to fail here instead of shipping stale JS.
+      - run: npm run check:lib
+
+      - run: npm run check:docs
+
+      - run: npm test
