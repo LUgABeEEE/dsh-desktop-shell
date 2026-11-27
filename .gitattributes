@@ -1,0 +1,7 @@
+# Keep the working tree byte-identical on every platform.
+#
+# Two things depend on it: `scripts/check-docs.mjs` scans for stray control
+# characters (and a CRLF checkout used to look like one), and `check:lib` compares
+# the freshly compiled `lib/` against the committed copy with `git diff --exit-code`
+# — line endings changing under it would report a diff that is not a change.
+* text=auto eol=lf

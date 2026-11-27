@@ -23,6 +23,12 @@ for (const file of files) {
     continue
   }
 
+  // CRLF is a line ending, not corruption: a Windows checkout (and anyone editing
+  // these files there) produces `\r\n` throughout, and flagging it made this check
+  // pass only on Linux — it failed every Windows CI job with "0xd" on all files.
+  // A *lone* `\r` is still corruption, and the loop below still catches it.
+  text = text.replace(/\r\n/g, '\n')
+
   const control = new Set()
   for (const ch of text) {
     const code = ch.charCodeAt(0)
