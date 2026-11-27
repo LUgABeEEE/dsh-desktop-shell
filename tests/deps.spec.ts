@@ -39,9 +39,19 @@ describe('clipboardy', () => {
     const { loadClipboardDeps, readClipboard } = await import('../src/clipboard.js')
     const deps = await loadClipboardDeps()
     const result = await readClipboard(deps)
-    // Whatever is on the clipboard right now, reading must not throw.
-    expect(result.ok).toBe(true)
-    expect(typeof result.text).toBe('string')
+    // What this promises: reading must not throw, and a read that cannot happen has
+    // to come back as a reported error — that is the shape the tool call relies on.
+    //
+    // Whether a clipboard exists is a property of the machine, not of this code: a
+    // headless CI runner has no X server and no display session, and a locked
+    // Windows desktop refuses clipboard access by design. Asserting `ok` here made
+    // the suite fail on every runner while saying nothing about the plugin.
+    if (result.ok) {
+      expect(typeof result.text).toBe('string')
+    } else {
+      expect(typeof result.error).toBe('string')
+      expect(result.error?.length ?? 0).toBeGreaterThan(0)
+    }
   })
 })
 
